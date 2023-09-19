@@ -27,31 +27,61 @@ const AccountSlice = createSlice({
   reducers: {
     deposit(state, action) {
       state.balance += action.payload;
+      state.isLoading = false;
     },
     withdraw(state, action) {
       state.balance -= action.payload;
     },
-    requestLoan(state, action) {
-      if (state.loan > 0) return;
-      state.loan = action.payload.amount;
-      state.loanPurpose = action.payload.purpose;
-      state.balance = state.balance + action.payload.amount;
+    requestLoan: {
+      prepare(amount: number, purpose: string) {
+        return { payload: { amount, purpose } };
+      },
+
+      reducer(state, action: actionType) {
+        if (state.loan > 0) return;
+        state.loan = action.payload.amount;
+        state.loanPurpose = action.payload.purpose;
+        state.balance = state.balance + action.payload.amount;
+      },
     },
     payLoan(state) {
+      state.balance -= state.loan;
       state.loan = 0;
       state.loanPurpose = "";
-      state.balance -= state.loan;
+    },
+    convertingCurrency(state) {
+      state.isLoading = true;
     },
   },
 });
 
 console.log(AccountSlice);
 
-export const { deposit, withdraw, requestLoan, payLoan } = AccountSlice.actions;
+// export const { deposit, withdraw, requestLoan, payLoan } = AccountSlice.actions;
+export const { withdraw, requestLoan, payLoan } = AccountSlice.actions;
+
+// using the manual action provider approach to implement thunk:
+export function deposit(amount: number, currency: string) {
+  if (currency === "USD") return { type: "account/deposit", payload: amount };
+
+  // using thunk
+  return async function (dispatch: (x: actionType) => void, getState: any) {
+    dispatch({ type: "account/convertingCurrency" });
+    // API call
+    const res = await fetch(
+      `https://api.frankfurter.app/latest?amount=${amount}&from=${currency}&to=USD`
+    );
+    const data = await res.json();
+    const convertedTOUSD = data.rates.USD;
+
+    // return action
+    dispatch({ type: "account/deposit", payload: convertedTOUSD });
+  };
+}
 
 export default AccountSlice.reducer;
 
-// OLD:
+// OLD: (better for small state)
 // export default function accountReducer(
 //   state: initialStateAccountType = initialStateAccount,
 //   action: actionType
